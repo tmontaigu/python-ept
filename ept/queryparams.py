@@ -1,8 +1,8 @@
 import asyncio
-from multiprocessing.pool import ThreadPool
-from typing import Dict, List
+from concurrent.futures import ThreadPoolExecutor
 
 import pylas
+from typing import Dict, List
 
 from ept.boundingboxes import BoundingBox
 from ept.key import Key
@@ -71,19 +71,21 @@ def sync_download_job(client, key):
 
 
 def sync_download_laz(source, overlaps_key, n_threads=16):
-    with source.get_client() as client, ThreadPool(n_threads) as pool:
+    with source.get_client() as client, ThreadPoolExecutor(n_threads) as pool:
         bin_datas = pool.map(client.fetch_bin, (key + '.laz' for key in overlaps_key))
     return bin_datas
 
 
-def read_laz_files(laz_files, query_bounds):
-    lases = [pylas.read(b) for b in laz_files]
-
-    las = pylas.merge(lases)
+def filter_las_points(las, query):
     x = las.x
-    las.points = las.points[(x >= query_bounds.xmin) & (x <= query_bounds.xmax)]
+    las.points = las.points[(x >= query.bounds.xmin) & (x <= query.bounds.xmax)]
     y = las.y
-    las.points = las.points[(y >= query_bounds.ymin) & (y <= query_bounds.ymax)]
+    las.points = las.points[(y >= query.bounds.ymin) & (y <= query.bounds.ymax)]
     z = las.z
-    las.points = las.points[(z >= query_bounds.zmin) & (z <= query_bounds.zmax)]
+    las.points = las.points[(z >= query.bounds.zmin) & (z <= query.bounds.zmax)]
+
+
+def read_laz_files(laz_files):
+    lases = [pylas.read(b) for b in laz_files]
+    las = pylas.merge(lases)
     return las

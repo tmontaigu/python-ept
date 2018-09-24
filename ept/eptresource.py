@@ -1,7 +1,7 @@
 from ept.boundingboxes import BoundingBox3D
 from ept.hierarchy import load_hierarchy, SyncHierarchyLoader
 from ept.key import Key
-from ept.queryparams import overlaps, download_laz, read_laz_files, sync_download_laz
+from ept.queryparams import overlaps, download_laz, read_laz_files, sync_download_laz, filter_las_points
 from ept.sources import get_source, get_sync_source
 
 
@@ -34,8 +34,10 @@ class EPTResource:
         overlaps_key = []
         overlaps(hierarchy, key, params, overlaps_key)
 
-        las = await download_laz(self.source, overlaps_key)
-        return read_laz_files(las, params.bounds)
+        lases = await download_laz(self.source, overlaps_key)
+        las = read_laz_files(lases)
+        filter_las_points(las, params)
+        return las
 
 
 class SyncEPTResource:
@@ -68,4 +70,6 @@ class SyncEPTResource:
         overlaps(hierarchy, key, params, overlaps_key)
 
         las = sync_download_laz(self.source, overlaps_key, n_threads=self.n_threads)
-        return read_laz_files(las, params.bounds)
+        las = read_laz_files(las)
+        filter_las_points(las, params)
+        return las
