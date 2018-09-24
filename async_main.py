@@ -1,13 +1,13 @@
 import asyncio
 
-from ept.boundingboxes import BoundingBox3D
+from ept.boundingboxes import BoundingBox3D, BoundingBox2D
 from ept.eptresource import EPTResource
 from ept.queryparams import QueryParams
 
 
 async def main_s3():
     address = "https://na-c.entwine.io/dk"
-    query_bounds = BoundingBox3D(*[1133208, 7588362, 0, 1134607, 7589830, 50])
+    query_bounds = BoundingBox2D(1133208, 7588362, 1134607, 7589830)
     resource = EPTResource(address)
 
     params = QueryParams(query_bounds)

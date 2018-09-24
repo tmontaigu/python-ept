@@ -1,7 +1,8 @@
 from ept.boundingboxes import BoundingBox3D
 from ept.hierarchy import load_hierarchy, SyncHierarchyLoader
 from ept.key import Key
-from ept.queryparams import overlaps, download_laz, read_laz_files, sync_download_laz, filter_las_points
+from ept.queryparams import sync_overlaps, download_laz, sync_read_laz_files, sync_download_laz, filter_las_points, \
+    QueryParams, overlaps, read_laz_files
 from ept.sources import get_source, get_sync_source
 
 
@@ -28,14 +29,14 @@ class EPTResource:
 
     async def query(self, params):
         info = await self.info
+        params.ensure_3d_bounds(info['bounds'])
         hierarchy = await self.hierarchy
 
         key = Key(BoundingBox3D(*info['bounds']))
-        overlaps_key = []
-        overlaps(hierarchy, key, params, overlaps_key)
+        overlaps_key = await overlaps(hierarchy, key, params)
 
         lases = await download_laz(self.source, overlaps_key)
-        las = read_laz_files(lases)
+        las = await read_laz_files(lases)
         filter_las_points(las, params)
         return las
 
@@ -62,14 +63,15 @@ class SyncEPTResource:
             self._hierarchy = hierarchy_loader.load()
         return self._hierarchy
 
-    def query(self, params):
+    def query(self, params: QueryParams):
         info = self.info
+        params.ensure_3d_bounds(info['bounds'])
         hierarchy = self.hierarchy
         key = Key(BoundingBox3D(*info['bounds']))
         overlaps_key = []
-        overlaps(hierarchy, key, params, overlaps_key)
+        sync_overlaps(hierarchy, key, params, overlaps_key)
 
         las = sync_download_laz(self.source, overlaps_key, n_threads=self.n_threads)
-        las = read_laz_files(las)
+        las = sync_read_laz_files(las)
         filter_las_points(las, params)
         return las
