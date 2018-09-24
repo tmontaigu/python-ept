@@ -121,7 +121,14 @@ def filter_las_points(las, query):
     las.points = las.points[(z >= query.bounds.zmin) & (z <= query.bounds.zmax)]
 
 
-def read_laz_files(laz_files):
+def sync_read_laz_files(laz_files):
     lases = [pylas.read(b) for b in laz_files]
     las = pylas.merge(lases)
     return las
+
+
+async def read_laz_files(laz_files):
+    loop = asyncio.get_event_loop()
+    futures = [loop.run_in_executor(None, pylas.read, f) for f in laz_files]
+    read_laz = [response for response in await asyncio.gather(*futures)]
+    return await loop.run_in_executor(None, pylas.merge, read_laz)
