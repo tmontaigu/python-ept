@@ -4,7 +4,7 @@ from concurrent.futures import ThreadPoolExecutor
 import pylas
 from typing import Dict, List
 
-from ept.boundingboxes import BoundingBox
+from ept.boundingboxes import BoundingBox, BoundingBox2D, BoundingBox3D
 from ept.key import Key
 
 
@@ -35,8 +35,13 @@ class QueryParams:
         self.bounds: BoundingBox = bounds
         self.depth_range: DepthRange = depth_range
 
+    def ensure_3d_bounds(self, reference_bounds):
+        if isinstance(self.bounds, BoundingBox2D):
+            xmin, ymin, xmax, ymax = self.bounds
+            self.bounds = BoundingBox3D(xmin, ymin, reference_bounds[2], xmax, ymax, reference_bounds[5])
 
-def overlaps(hierarchy: Dict[str, int], key: Key, params: QueryParams, overlaps_key: List):
+
+def sync_overlaps(hierarchy: Dict[str, int], key: Key, params: QueryParams, overlaps_key: List):
     if not key.bounds.overlaps(params.bounds):
         return
 
@@ -54,7 +59,38 @@ def overlaps(hierarchy: Dict[str, int], key: Key, params: QueryParams, overlaps_
         return
 
     for i in range(8):
-        overlaps(hierarchy, key.bisect(i), params, overlaps_key)
+        sync_overlaps(hierarchy, key.bisect(i), params, overlaps_key)
+
+
+def _overlaps(hierarchy: Dict[str, int], start_key: Key, params: QueryParams) -> List[str]:
+    keys, overlaps_key = [start_key], []
+    while keys:
+        current_key = keys.pop()
+        if not current_key.bounds.overlaps(params.bounds):
+            continue
+
+        try:
+            count = hierarchy[str(current_key)]
+        except KeyError:
+            continue
+        else:
+            if count == 0:
+                continue
+
+        overlaps_key.append(str(current_key))
+
+        if params.depth_range.is_deeper(current_key.d):
+            continue
+
+        for i in range(8):
+            keys.append(current_key.bisect(i))
+    return overlaps_key
+
+
+async def overlaps(hierarchy: Dict[str, int], key: Key, params: QueryParams, loop=None):
+    if loop is None:
+        loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(None, _overlaps, hierarchy, key, params)
 
 
 async def download_laz(source, overlaps_key):
