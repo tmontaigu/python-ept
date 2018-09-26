@@ -1,4 +1,3 @@
-import asyncio
 import logging
 
 from ept.boundingboxes import BoundingBox3D
@@ -34,7 +33,7 @@ class EPTResource:
             self._hierarchy = await load_hierarchy(self.source, hierarchy_step)
         return self._hierarchy
 
-    async def query(self, params):
+    async def query_tile_bytes(self, params):
         info = await self.info
         params.ensure_3d_bounds(info['bounds'])
         hierarchy = await self.hierarchy
@@ -44,7 +43,10 @@ class EPTResource:
         overlaps_key = await overlaps(hierarchy, key, params)
 
         logger.info("Downloading")
-        lases = await download_laz(self.source, overlaps_key)
+        return await download_laz(self.source, overlaps_key)
+
+    async def query(self, params):
+        lases = self.query_tile_bytes(params)
         logger.info("Reading")
         las = await read_laz_files(lases)
         await filter_las_points(las, params)
@@ -85,4 +87,3 @@ class SyncEPTResource:
         las = sync_read_laz_files(las)
         filter_las_points(las, params)
         return las
-

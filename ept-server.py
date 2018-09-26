@@ -1,31 +1,24 @@
 import asyncio
 import logging
+from collections import defaultdict
 from concurrent.futures import ProcessPoolExecutor
 
 import io
 from aiohttp import web
 
-from ept.boundingboxes import BoundingBox2D, BoundingBox3D
+from ept.boundingboxes import BoundingBox2D
 from ept.eptresource import EPTResource
-from ept.key import Key
-from ept.queryparams import QueryParams, overlaps, download_laz, sync_read_laz_files, sync_filter_las_points
+from ept.queryparams import QueryParams, sync_read_laz_files, sync_filter_las_points
 
 logger = logging.getLogger(__name__)
 
-RESOURCES = {}
-pool = ProcessPoolExecutor(8)
-
-
-async def get_info(request):
-    name = request.match_info["resource_name"]
-    address = "https://na-c.entwine.io/{}".format(name)
-    ept = EPTResource(address)
-    return web.json_response(await ept.info)
+RESOURCES = defaultdict(EPTResource)
+POOL = ProcessPoolExecutor(8)
 
 
 async def process(lazes_bytes, query):
     loop = asyncio.get_event_loop()
-    return await loop.run_in_executor(pool, _process, lazes_bytes, query)
+    return await loop.run_in_executor(POOL, _process, lazes_bytes, query)
 
 
 def _process(lazes_bytes, query):
@@ -45,6 +38,13 @@ async def las_to_bytes(las):
     return await loop.run_in_executor(None, _las_to_bytes, las)
 
 
+async def get_info(request):
+    name = request.match_info["resource_name"]
+    address = "https://na-c.entwine.io/{}".format(name)
+    ept = EPTResource(address)
+    return web.json_response(await ept.info)
+
+
 async def read(request):
     name = request.match_info["resource_name"]
     address = "https://na-c.entwine.io/{}".format(name)
@@ -53,31 +53,18 @@ async def read(request):
 
     text = " ".join(a for a in (name, xmin, ymin, xmax, ymax))
     logger.info("The Query: {}".format(text))
-    try:
-        ept = RESOURCES[address]
-        logger.info("Found existing")
-    except KeyError:
-        ept = EPTResource(address)
-        RESOURCES[address] = ept
+    ept = RESOURCES[address]
 
     query_bounds = BoundingBox2D(int(xmin), int(ymin), int(xmax), int(ymax))
     params = QueryParams(query_bounds)
 
-    info = await ept.info
-    params.ensure_3d_bounds(info['bounds'])
-    hierarchy = await ept.hierarchy
-
-    logger.info("Computing overlap")
-    key = Key(BoundingBox3D(*info['bounds']))
-    overlaps_key = await overlaps(hierarchy, key, params)
-
     logger.info("Downloading")
-    lases = await download_laz(ept.source, overlaps_key)
+    tiles_bytes = await ept.query_tile_bytes(params)
     logger.info("Processing")
-    bytes = await process(lases, params)
+    las_bytes = await process(tiles_bytes, params)
 
-    logger.info("Sending {} bytes".format(len(bytes)))
-    return web.Response(body=b'')
+    logger.info("Sending {} bytes".format(len(las_bytes)))
+    return web.Response(body=las_bytes)
 
 
 async def prepare():
@@ -89,7 +76,8 @@ async def prepare():
 if __name__ == '__main__':
     import logging
 
-    logging.basicConfig(level=logging.INFO)
+    logging.basicConfig(level=logging.INFO,
+                        format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 
     loop = asyncio.get_event_loop()
     future = asyncio.ensure_future(prepare())
