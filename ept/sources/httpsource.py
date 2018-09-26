@@ -20,6 +20,7 @@ class HTTPClient:
 
     async def fetch_json(self, key):
         async with self.session.get(self.root_url + "/" + key) as response:
+            response.raise_for_status()
             return await response.json()
 
     async def fetch_bin(self, key):

@@ -1,4 +1,5 @@
 import asyncio
+import logging
 from concurrent.futures import ThreadPoolExecutor
 
 import pylas
@@ -6,6 +7,8 @@ from typing import Dict, List
 
 from ept.boundingboxes import BoundingBox, BoundingBox2D, BoundingBox3D
 from ept.key import Key
+
+logger = logging.getLogger(__name__)
 
 
 class DepthRange:
@@ -93,26 +96,13 @@ async def overlaps(hierarchy: Dict[str, int], key: Key, params: QueryParams, loo
     return await loop.run_in_executor(None, _overlaps, hierarchy, key, params)
 
 
-async def download_laz(source, overlaps_key):
-    async with source.get_client() as client:
-        lases = []
-        for key in overlaps_key:
-            lases.append(asyncio.ensure_future(client.fetch_bin(key + ".laz")))
-
-        return await asyncio.gather(*lases)
-
-
-def sync_download_job(client, key):
-    return client.fetch_bin(key)
-
-
 def sync_download_laz(source, overlaps_key, n_threads=16):
     with source.get_client() as client, ThreadPoolExecutor(n_threads) as pool:
         bin_datas = pool.map(client.fetch_bin, (key + '.laz' for key in overlaps_key))
     return bin_datas
 
 
-def filter_las_points(las, query):
+def sync_filter_las_points(las, query):
     x = las.x
     las.points = las.points[(x >= query.bounds.xmin) & (x <= query.bounds.xmax)]
     y = las.y
@@ -127,8 +117,19 @@ def sync_read_laz_files(laz_files):
     return las
 
 
-async def read_laz_files(laz_files):
-    loop = asyncio.get_event_loop()
-    futures = [loop.run_in_executor(None, pylas.read, f) for f in laz_files]
-    read_laz = [response for response in await asyncio.gather(*futures)]
-    return await loop.run_in_executor(None, pylas.merge, read_laz)
+async def download_laz(source, keys):
+    async with source.get_client() as client:
+        futures = [client.fetch_bin(key + ".laz") for key in keys]
+        return await asyncio.gather(*futures)
+
+
+async def filter_las_points(las, query, loop=None, executor=None):
+    if loop is None:
+        loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(executor, sync_filter_las_points, las, query)
+
+
+async def read_laz_files(laz_files, loop=None, executor=None):
+    if loop is None:
+        loop = asyncio.get_event_loop()
+    return await loop.run_in_executor(executor, sync_read_laz_files, laz_files)
