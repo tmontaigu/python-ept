@@ -46,7 +46,7 @@ class EPTResource:
         return await download_laz(self.source, overlaps_key)
 
     async def query(self, params):
-        lases = self.query_tile_bytes(params)
+        lases = await self.query_tile_bytes(params)
         logger.info("Reading")
         las = await read_laz_files(lases)
         await filter_las_points(las, params)
