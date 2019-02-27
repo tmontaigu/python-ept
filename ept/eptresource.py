@@ -11,11 +11,12 @@ logger = logging.getLogger(__name__)
 
 
 class EPTResource:
-    def __init__(self, root_address):
+    def __init__(self, root_address, executor=None):
         self.root_address = root_address
         self.source = get_source(root_address)
         self._info = None
         self._hierarchy = None
+        self.executor = executor
 
     @property
     async def info(self):
@@ -48,8 +49,8 @@ class EPTResource:
     async def query(self, params):
         lases = await self.query_tile_bytes(params)
         logger.info("Reading")
-        las = await read_laz_files(lases)
-        await filter_las_points(las, params)
+        las = await read_laz_files(lases, executor=self.executor)
+        await filter_las_points(las, params, executor=self.executor)
         return las
 
 
