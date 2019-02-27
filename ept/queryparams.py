@@ -32,6 +32,11 @@ class DepthRange:
         else:
             raise ValueError('depth cannot be negative')
 
+    def __repr__(self):
+        return "<DepthRange({}, {})>".format(
+            self.depth_begin, self.depth_end
+        )
+
 
 class QueryParams:
     def __init__(self, bounds, depth_range=DepthRange()):
@@ -118,6 +123,7 @@ def sync_read_laz_files(laz_files):
 
 
 async def download_laz(source, keys):
+    logger.debug("Starting download of {} keys".format(len(keys)))
     async with source.get_client() as client:
         futures = [client.fetch_bin(key + ".laz") for key in keys]
         return await asyncio.gather(*futures)
